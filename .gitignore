@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Database
+backend/database.json
+
+# Build files
+frontend/dist/
+frontend/build/
+
+# Environment variables
+.env
+.env.local
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

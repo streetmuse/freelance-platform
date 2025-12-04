@@ -1,4 +1,4 @@
-
+// src/App.jsx - React Frontend with Login
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
@@ -6,7 +6,12 @@ const API_URL = 'http://localhost:5000/api';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers] = useState([]);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [registerMode, setRegisterMode] = useState(false);
+  const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
+  const [error, setError] = useState('');
+  
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [proposals, setProposals] = useState([]);
@@ -16,14 +21,6 @@ function App() {
   const [jobForm, setJobForm] = useState({ title: '', description: '', budget: '' });
   const [proposalForm, setProposalForm] = useState({ coverLetter: '', proposedBudget: '', timeline: '' });
 
-  // Load users on mount
-  useEffect(() => {
-    fetch(`${API_URL}/users`)
-      .then(res => res.json())
-      .then(data => setUsers(data))
-      .catch(err => console.error('Error loading users:', err));
-  }, []);
-
   useEffect(() => {
     if (currentUser) loadJobs();
   }, [currentUser]);
@@ -31,6 +28,68 @@ function App() {
   useEffect(() => {
     if (selectedJob) loadProposals(selectedJob.id);
   }, [selectedJob]);
+
+  const handleLogin = async () => {
+    setError('');
+    if (!loginForm.email || !loginForm.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginForm.email,
+          password: loginForm.password,
+          role: selectedRole
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setCurrentUser(data);
+        setLoginForm({ email: '', password: '' });
+      } else {
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Connection error. Make sure backend is running.');
+    }
+  };
+
+  const handleRegister = async () => {
+    setError('');
+    if (!registerForm.name || !registerForm.email || !registerForm.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...registerForm,
+          role: selectedRole
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setCurrentUser(data);
+        setRegisterForm({ name: '', email: '', password: '' });
+        setRegisterMode(false);
+      } else {
+        setError(data.error || 'Registration failed');
+      }
+    } catch (err) {
+      setError('Connection error. Make sure backend is running.');
+    }
+  };
 
   const loadJobs = async () => {
     try {
@@ -147,7 +206,14 @@ function App() {
     }
   };
 
-  if (!currentUser) {
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setSelectedRole(null);
+    setError('');
+  };
+
+  // Role Selection Screen
+  if (!selectedRole) {
     return (
       <div className="login-container">
         <div className="login-card">
@@ -158,28 +224,120 @@ function App() {
           </div>
           
           <div className="user-list">
-            {users.map(user => (
-              <button
-                key={user.id}
-                onClick={() => setCurrentUser(user)}
-                className="user-button"
-              >
-                <div>
-                  <div className="user-name">{user.name}</div>
-                  <div className="user-role">{user.role}</div>
-                </div>
-                <span className="user-icon">{
-                  user.role === 'Admin' ? '👑' : 
-                  user.role === 'Client' ? '💼' : '👨‍💻'
-                }</span>
-              </button>
-            ))}
+            <button onClick={() => setSelectedRole('Admin')} className="user-button">
+              <div>
+                <div className="user-name">Admin</div>
+                <div className="user-role">Manage platform</div>
+              </div>
+              <span className="user-icon">👑</span>
+            </button>
+            
+            <button onClick={() => setSelectedRole('Client')} className="user-button">
+              <div>
+                <div className="user-name">Client</div>
+                <div className="user-role">Post jobs</div>
+              </div>
+              <span className="user-icon">💼</span>
+            </button>
+            
+            <button onClick={() => setSelectedRole('Freelancer')} className="user-button">
+              <div>
+                <div className="user-name">Freelancer</div>
+                <div className="user-role">Find work</div>
+              </div>
+              <span className="user-icon">👨‍💻</span>
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
+  // Login Screen
+  if (!currentUser) {
+    return (
+      <div className="login-container">
+        <div className="login-card">
+          <button onClick={() => setSelectedRole(null)} className="back-btn">
+            ← Back
+          </button>
+          
+          <div className="login-header">
+            <div className="logo">
+              {selectedRole === 'Admin' ? '👑' : selectedRole === 'Client' ? '💼' : '👨‍💻'}
+            </div>
+            <h1>{registerMode ? 'Register' : 'Login'} as {selectedRole}</h1>
+            <p>{registerMode ? 'Create your account' : 'Enter your credentials'}</p>
+          </div>
+
+          {error && <div className="error-message">{error}</div>}
+
+          <div className="login-form">
+            {registerMode && (
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={registerForm.name}
+                onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})}
+                className="input"
+              />
+            )}
+            
+            <input
+              type="email"
+              placeholder="Email"
+              value={registerMode ? registerForm.email : loginForm.email}
+              onChange={(e) => registerMode 
+                ? setRegisterForm({...registerForm, email: e.target.value})
+                : setLoginForm({...loginForm, email: e.target.value})
+              }
+              className="input"
+            />
+            
+            <input
+              type="password"
+              placeholder="Password"
+              value={registerMode ? registerForm.password : loginForm.password}
+              onChange={(e) => registerMode
+                ? setRegisterForm({...registerForm, password: e.target.value})
+                : setLoginForm({...loginForm, password: e.target.value})
+              }
+              className="input"
+              onKeyPress={(e) => e.key === 'Enter' && (registerMode ? handleRegister() : handleLogin())}
+            />
+
+            <button 
+              onClick={registerMode ? handleRegister : handleLogin} 
+              className="btn-primary full-width"
+            >
+              {registerMode ? 'Register' : 'Login'}
+            </button>
+
+            <div className="login-footer">
+              <button 
+                onClick={() => {
+                  setRegisterMode(!registerMode);
+                  setError('');
+                }}
+                className="link-btn"
+              >
+                {registerMode ? 'Already have an account? Login' : "Don't have an account? Register"}
+              </button>
+            </div>
+
+            <div className="demo-credentials">
+              <p><strong>Demo Credentials:</strong></p>
+              {selectedRole === 'Admin' && <p>admin@freelance.com / admin123</p>}
+              {selectedRole === 'Client' && <p>john@client.com / client123</p>}
+              {selectedRole === 'Freelancer' && <p>jane@freelancer.com / freelancer123</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main App (same as before)
   return (
     <div className="app">
       <header className="header">
@@ -193,8 +351,8 @@ function App() {
               <div className="user-name">{currentUser.name}</div>
               <div className="user-role">{currentUser.role}</div>
             </div>
-            <button onClick={() => setCurrentUser(null)} className="switch-btn">
-              Switch User
+            <button onClick={handleLogout} className="switch-btn">
+              Logout
             </button>
           </div>
         </div>

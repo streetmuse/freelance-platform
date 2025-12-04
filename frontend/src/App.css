@@ -89,6 +89,75 @@ body {
   font-size: 24px;
 }
 
+/* Login Form */
+.back-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-bottom: 16px;
+  transition: color 0.2s;
+}
+
+.back-btn:hover {
+  color: #1e293b;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+  border: 1px solid #fecaca;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px;
+}
+
+.link-btn:hover {
+  color: #2563eb;
+}
+
+.demo-credentials {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.demo-credentials p {
+  font-size: 13px;
+  color: #475569;
+  margin: 4px 0;
+}
+
+.demo-credentials strong {
+  color: #1e293b;
+}
+
 /* Main App */
 .app {
   min-height: 100vh;

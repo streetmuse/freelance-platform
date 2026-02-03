@@ -1,66 +1,84 @@
-// server.js - Express.js Backend with Login
+// server.js - Complete Backend with MongoDB
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const fs = require('fs').promises;
-const path = require('path');
+
+const User = require('./models/User');
+const Job = require('./models/Job');
+const Proposal = require('./models/Proposal');
+const Notification = require('./models/Notification');
+const ActivityLog = require('./models/ActivityLog');
 
 const app = express();
 const PORT = 5000;
-const DB_FILE = path.join(__dirname, 'database.json');
+
+const MONGODB_URI = 'mongodb+srv://nikolozlobzhanidze2_db_user:qmePQHjXKFClBNIi@cluster0.fxm7bmc.mongodb.net/freelance-platform?retryWrites=true&w=majority';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Initialize database with passwords
-async function initDB() {
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Helper function to create activity log
+async function logActivity(userId, userName, action, entityType, entityId, details) {
   try {
-    await fs.access(DB_FILE);
-  } catch {
-    const initialData = {
-      users: [
-        { id: 1, name: 'Admin User', role: 'Admin', email: 'admin@freelance.com', password: 'admin123' },
-        { id: 2, name: 'John Client', role: 'Client', email: 'john@client.com', password: 'client123' },
-        { id: 3, name: 'Jane Freelancer', role: 'Freelancer', email: 'jane@freelancer.com', password: 'freelancer123' },
-        { id: 4, name: 'Bob Freelancer', role: 'Freelancer', email: 'bob@freelancer.com', password: 'freelancer123' }
-      ],
-      jobs: [],
-      proposals: []
-    };
-    await fs.writeFile(DB_FILE, JSON.stringify(initialData, null, 2));
+    await ActivityLog.create({
+      userId,
+      userName,
+      action,
+      entityType,
+      entityId,
+      details
+    });
+  } catch (err) {
+    console.error('Error logging activity:', err);
   }
 }
 
-// Read database
-async function readDB() {
-  const data = await fs.readFile(DB_FILE, 'utf8');
-  return JSON.parse(data);
-}
-
-// Write database
-async function writeDB(data) {
-  await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2));
+// Helper function to create notification
+async function createNotification(userId, message, type, relatedId) {
+  try {
+    await Notification.create({
+      userId,
+      message,
+      type,
+      relatedId
+    });
+  } catch (err) {
+    console.error('Error creating notification:', err);
+  }
 }
 
 // ============ AUTH ROUTES ============
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password, role } = req.body;
-    const db = await readDB();
     
-    const user = db.users.find(u => 
-      u.email === email && 
-      u.password === password && 
-      u.role === role
-    );
+    const user = await User.findOne({ email, password, role });
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    // Don't send password back
-    const { password: _, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+    
+    // Log activity
+    await logActivity(user._id, user.name, 'Login', 'user', user._id, `${user.role} logged in`);
+    
+    const userResponse = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    };
+    
+    res.json(userResponse);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -69,26 +87,30 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-    const db = await readDB();
     
-    // Check if email already exists
-    if (db.users.find(u => u.email === email)) {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
       return res.status(400).json({ error: 'Email already exists' });
     }
     
-    const newUser = {
-      id: Date.now(),
+    const newUser = await User.create({
       name,
       email,
       password,
       role
+    });
+    
+    // Log activity
+    await logActivity(newUser._id, newUser.name, 'Register', 'user', newUser._id, `New ${role} registered`);
+    
+    const userResponse = {
+      id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role
     };
     
-    db.users.push(newUser);
-    await writeDB(db);
-    
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.status(201).json(userWithoutPassword);
+    res.status(201).json(userResponse);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -97,10 +119,8 @@ app.post('/api/auth/register', async (req, res) => {
 // ============ USER ROUTES ============
 app.get('/api/users', async (req, res) => {
   try {
-    const db = await readDB();
-    // Remove passwords from response
-    const usersWithoutPasswords = db.users.map(({ password, ...user }) => user);
-    res.json(usersWithoutPasswords);
+    const users = await User.find().select('-password');
+    res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -108,12 +128,41 @@ app.get('/api/users', async (req, res) => {
 
 app.get('/api/users/:id', async (req, res) => {
   try {
-    const db = await readDB();
-    const user = db.users.find(u => u.id === parseInt(req.params.id));
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { name, email, role } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { name, email, role },
+      { new: true }
+    ).select('-password');
+    
     if (!user) return res.status(404).json({ error: 'User not found' });
     
-    const { password, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    await logActivity(user._id, user.name, 'Update Profile', 'user', user._id, 'Profile updated');
+    
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    await logActivity(req.body.adminId, req.body.adminName, 'Delete User', 'user', user._id, `Deleted user: ${user.name}`);
+    
+    res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -122,18 +171,21 @@ app.get('/api/users/:id', async (req, res) => {
 // ============ JOB ROUTES ============
 app.get('/api/jobs', async (req, res) => {
   try {
-    const db = await readDB();
     const { userId, role } = req.query;
     
-    let jobs = db.jobs;
+    let query = {};
     
-    // Filter for freelancers: hide "In Progress" jobs unless they're hired
+    // Filter for freelancers: hide jobs in progress unless they're hired
     if (role === 'Freelancer' && userId) {
-      jobs = jobs.filter(job => 
-        job.status === 'Open' || job.hiredFreelancerId === parseInt(userId)
-      );
+      query = {
+        $or: [
+          { status: { $in: ['Draft', 'Active'] } },
+          { hiredFreelancerId: userId }
+        ]
+      };
     }
     
+    const jobs = await Job.find(query).sort({ createdAt: -1 });
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -142,15 +194,17 @@ app.get('/api/jobs', async (req, res) => {
 
 app.post('/api/jobs', async (req, res) => {
   try {
-    const db = await readDB();
-    const newJob = {
-      id: Date.now(),
-      ...req.body,
-      status: 'Open',
-      createdAt: new Date().toISOString()
-    };
-    db.jobs.push(newJob);
-    await writeDB(db);
+    const newJob = await Job.create(req.body);
+    
+    await logActivity(
+      req.body.clientId,
+      req.body.clientName,
+      'Create Job',
+      'job',
+      newJob._id,
+      `Created job: ${newJob.title}`
+    );
+    
     res.status(201).json(newJob);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -159,13 +213,24 @@ app.post('/api/jobs', async (req, res) => {
 
 app.put('/api/jobs/:id', async (req, res) => {
   try {
-    const db = await readDB();
-    const jobIndex = db.jobs.findIndex(j => j.id === parseInt(req.params.id));
-    if (jobIndex === -1) return res.status(404).json({ error: 'Job not found' });
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
     
-    db.jobs[jobIndex] = { ...db.jobs[jobIndex], ...req.body };
-    await writeDB(db);
-    res.json(db.jobs[jobIndex]);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    await logActivity(
+      req.body.userId || job.clientId,
+      req.body.userName || job.clientName,
+      'Update Job',
+      'job',
+      job._id,
+      `Updated job: ${job.title}`
+    );
+    
+    res.json(job);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -173,11 +238,21 @@ app.put('/api/jobs/:id', async (req, res) => {
 
 app.delete('/api/jobs/:id', async (req, res) => {
   try {
-    const db = await readDB();
-    const jobId = parseInt(req.params.id);
-    db.jobs = db.jobs.filter(j => j.id !== jobId);
-    db.proposals = db.proposals.filter(p => p.jobId !== jobId);
-    await writeDB(db);
+    const job = await Job.findByIdAndDelete(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    // Delete related proposals
+    await Proposal.deleteMany({ jobId: req.params.id });
+    
+    await logActivity(
+      req.body.userId,
+      req.body.userName,
+      'Delete Job',
+      'job',
+      job._id,
+      `Deleted job: ${job.title}`
+    );
+    
     res.json({ message: 'Job deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -187,14 +262,13 @@ app.delete('/api/jobs/:id', async (req, res) => {
 // ============ PROPOSAL ROUTES ============
 app.get('/api/proposals', async (req, res) => {
   try {
-    const db = await readDB();
-    const { jobId } = req.query;
+    const { jobId, userId } = req.query;
     
-    let proposals = db.proposals;
-    if (jobId) {
-      proposals = proposals.filter(p => p.jobId === parseInt(jobId));
-    }
+    let query = {};
+    if (jobId) query.jobId = jobId;
+    if (userId) query.freelancerId = userId;
     
+    const proposals = await Proposal.find(query).sort({ createdAt: -1 });
     res.json(proposals);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -203,15 +277,28 @@ app.get('/api/proposals', async (req, res) => {
 
 app.post('/api/proposals', async (req, res) => {
   try {
-    const db = await readDB();
-    const newProposal = {
-      id: Date.now(),
-      ...req.body,
-      status: 'Pending',
-      createdAt: new Date().toISOString()
-    };
-    db.proposals.push(newProposal);
-    await writeDB(db);
+    const newProposal = await Proposal.create(req.body);
+    
+    // Get job details for notification
+    const job = await Job.findById(req.body.jobId);
+    
+    // Create notification for client
+    await createNotification(
+      job.clientId,
+      `New proposal from ${req.body.freelancerName} for "${job.title}"`,
+      'proposal',
+      newProposal._id
+    );
+    
+    await logActivity(
+      req.body.freelancerId,
+      req.body.freelancerName,
+      'Submit Proposal',
+      'proposal',
+      newProposal._id,
+      `Submitted proposal for: ${job.title}`
+    );
+    
     res.status(201).json(newProposal);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -220,58 +307,198 @@ app.post('/api/proposals', async (req, res) => {
 
 app.put('/api/proposals/:id', async (req, res) => {
   try {
-    const db = await readDB();
-    const proposalIndex = db.proposals.findIndex(p => p.id === parseInt(req.params.id));
-    if (proposalIndex === -1) return res.status(404).json({ error: 'Proposal not found' });
+    const proposal = await Proposal.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
     
-    db.proposals[proposalIndex] = { ...db.proposals[proposalIndex], ...req.body };
-    await writeDB(db);
-    res.json(db.proposals[proposalIndex]);
+    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    
+    // Create notification for freelancer if rejected
+    if (req.body.status === 'Rejected') {
+      const job = await Job.findById(proposal.jobId);
+      await createNotification(
+        proposal.freelancerId,
+        `Your proposal for "${job.title}" was not accepted`,
+        'rejection',
+        proposal._id
+      );
+    }
+    
+    res.json(proposal);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Accept proposal (also updates job and rejects others)
+// Accept proposal
 app.post('/api/proposals/:id/accept', async (req, res) => {
   try {
-    const db = await readDB();
-    const proposalId = parseInt(req.params.id);
-    const proposal = db.proposals.find(p => p.id === proposalId);
-    
+    const proposal = await Proposal.findById(req.params.id);
     if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
     
     // Accept this proposal
     proposal.status = 'Accepted';
+    await proposal.save();
     
-    // Update job status and set hired freelancer
-    const job = db.jobs.find(j => j.id === proposal.jobId);
-    if (job) {
-      job.status = 'In Progress';
-      job.hiredFreelancerId = proposal.freelancerId;
-    }
+    // Update job status
+    const job = await Job.findById(proposal.jobId);
+    job.status = 'In Progress';
+    job.hiredFreelancerId = proposal.freelancerId;
+    job.hiredFreelancerName = proposal.freelancerName;
+    job.updatedAt = new Date();
+    await job.save();
     
-    // Reject all other pending proposals for this job
-    db.proposals.forEach(p => {
-      if (p.jobId === proposal.jobId && p.id !== proposalId && p.status === 'Pending') {
-        p.status = 'Rejected';
-      }
+    // Create notification for hired freelancer
+    await createNotification(
+      proposal.freelancerId,
+      `Congratulations! Your proposal for "${job.title}" was accepted`,
+      'acceptance',
+      proposal._id
+    );
+    
+    // Reject all other pending proposals
+    const otherProposals = await Proposal.find({
+      jobId: proposal.jobId,
+      _id: { $ne: proposal._id },
+      status: 'Pending'
     });
     
-    await writeDB(db);
+    for (const p of otherProposals) {
+      p.status = 'Rejected';
+      await p.save();
+      
+      // Notify rejected freelancers
+      await createNotification(
+        p.freelancerId,
+        `Your proposal for "${job.title}" was not accepted`,
+        'rejection',
+        p._id
+      );
+    }
+    
+    await logActivity(
+      job.clientId,
+      job.clientName,
+      'Accept Proposal',
+      'proposal',
+      proposal._id,
+      `Hired ${proposal.freelancerName} for: ${job.title}`
+    );
+    
     res.json({ proposal, job });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// ============ NOTIFICATION ROUTES ============
+app.get('/api/notifications/:userId', async (req, res) => {
+  try {
+    const notifications = await Notification.find({ userId: req.params.userId })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const notification = await Notification.findByIdAndUpdate(
+      req.params.id,
+      { isRead: true },
+      { new: true }
+    );
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/notifications/read-all/:userId', async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { userId: req.params.userId, isRead: false },
+      { isRead: true }
+    );
+    res.json({ message: 'All notifications marked as read' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ ACTIVITY LOG ROUTES ============
+app.get('/api/activity-logs', async (req, res) => {
+  try {
+    const { userId, limit = 100 } = req.query;
+    
+    let query = {};
+    if (userId) query.userId = userId;
+    
+    const logs = await ActivityLog.find(query)
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit));
+    
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ ADMIN STATS ROUTE ============
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalJobs = await Job.countDocuments();
+    const totalProposals = await Proposal.countDocuments();
+    const activeJobs = await Job.countDocuments({ status: 'Active' });
+    const inProgressJobs = await Job.countDocuments({ status: 'In Progress' });
+    const completedJobs = await Job.countDocuments({ status: 'Completed' });
+    
+    const usersByRole = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+    
+    res.json({
+      totalUsers,
+      totalJobs,
+      totalProposals,
+      activeJobs,
+      inProgressJobs,
+      completedJobs,
+      usersByRole
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Seed initial admin user
+async function seedAdmin() {
+  try {
+    const adminExists = await User.findOne({ role: 'Admin' });
+    if (!adminExists) {
+      await User.create({
+        name: 'Admin User',
+        email: 'admin@freelance.com',
+        password: 'admin123',
+        role: 'Admin'
+      });
+      console.log('✅ Admin user created');
+    }
+  } catch (err) {
+    console.error('Error seeding admin:', err);
+  }
+}
+
 // Start server
-initDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`\n📝 Demo Login Credentials:`);
-    console.log(`Admin: admin@freelance.com / admin123`);
-    console.log(`Client: john@client.com / client123`);
-    console.log(`Freelancer: jane@freelancer.com / freelancer123`);
-  });
+app.listen(PORT, () => {
+  console.log(`\n✅ Server running on http://localhost:${PORT}`);
+  console.log('\n📝 Demo Login Credentials:');
+  console.log('Admin: admin@freelance.com / admin123');
+  console.log('\nRegister as Client or Freelancer to test the system\n');
+  seedAdmin();
 });

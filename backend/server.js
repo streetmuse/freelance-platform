@@ -12,6 +12,7 @@ const ActivityLog = require('./models/ActivityLog');
 const app = express();
 const PORT = 5000;
 
+// IMPORTANT: Replace this with your MongoDB Atlas connection string
 const MONGODB_URI = 'mongodb+srv://nikolozlobzhanidze2_db_user:qmePQHjXKFClBNIi@cluster0.fxm7bmc.mongodb.net/freelance-platform?retryWrites=true&w=majority';
 
 // Middleware
@@ -175,11 +176,11 @@ app.get('/api/jobs', async (req, res) => {
     
     let query = {};
     
-    // Filter for freelancers: hide jobs in progress unless they're hired
+    // Filter for freelancers: only show Active jobs and jobs they're hired for
     if (role === 'Freelancer' && userId) {
       query = {
         $or: [
-          { status: { $in: ['Draft', 'Active'] } },
+          { status: 'Active' },
           { hiredFreelancerId: userId }
         ]
       };
@@ -194,6 +195,11 @@ app.get('/api/jobs', async (req, res) => {
 
 app.post('/api/jobs', async (req, res) => {
   try {
+    // Validate budget is positive
+    if (req.body.budget && req.body.budget < 0) {
+      return res.status(400).json({ error: 'Budget must be a positive number' });
+    }
+    
     const newJob = await Job.create(req.body);
     
     await logActivity(
@@ -277,6 +283,21 @@ app.get('/api/proposals', async (req, res) => {
 
 app.post('/api/proposals', async (req, res) => {
   try {
+    // Validate proposed budget is positive
+    if (req.body.proposedBudget && req.body.proposedBudget < 0) {
+      return res.status(400).json({ error: 'Proposed budget must be a positive number' });
+    }
+    
+    // Check if freelancer already applied to this job
+    const existingProposal = await Proposal.findOne({
+      jobId: req.body.jobId,
+      freelancerId: req.body.freelancerId
+    });
+    
+    if (existingProposal) {
+      return res.status(400).json({ error: 'You have already applied to this job' });
+    }
+    
     const newProposal = await Proposal.create(req.body);
     
     // Get job details for notification

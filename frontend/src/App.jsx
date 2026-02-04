@@ -1,61 +1,63 @@
-// src/App.jsx - Complete Frontend with Admin Dashboard & Notifications
+// src/App.jsx - Complete Frontend with React Router
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import './App.css';
 
 const API_URL = 'http://localhost:5000/api';
 
-function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [selectedRole, setSelectedRole] = useState(null);
+// Role Selection Component
+function RoleSelection() {
+  const navigate = useNavigate();
+
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <div className="login-header">
+          <div className="logo">💼</div>
+          <h1>FreelanceHub</h1>
+          <p>Select your role to continue</p>
+        </div>
+        
+        <div className="user-list">
+          <button onClick={() => navigate('/login/admin')} className="user-button">
+            <div>
+              <div className="user-name">Admin</div>
+              <div className="user-role">Manage platform</div>
+            </div>
+            <span className="user-icon">👑</span>
+          </button>
+          
+          <button onClick={() => navigate('/login/client')} className="user-button">
+            <div>
+              <div className="user-name">Client</div>
+              <div className="user-role">Post jobs</div>
+            </div>
+            <span className="user-icon">💼</span>
+          </button>
+          
+          <button onClick={() => navigate('/login/freelancer')} className="user-button">
+            <div>
+              <div className="user-name">Freelancer</div>
+              <div className="user-role">Find work</div>
+            </div>
+            <span className="user-icon">👨‍💻</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Login Component
+function Login() {
+  const { role } = useParams();
+  const navigate = useNavigate();
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerMode, setRegisterMode] = useState(false);
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
-  
-  const [view, setView] = useState('jobs'); // 'jobs', 'admin', 'notifications', 'activity'
-  const [jobs, setJobs] = useState([]);
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [proposals, setProposals] = useState([]);
-  const [showJobForm, setShowJobForm] = useState(false);
-  const [showProposalForm, setShowProposalForm] = useState(false);
-  
-  const [jobForm, setJobForm] = useState({ title: '', description: '', budget: '', status: 'Active' });
-  const [proposalForm, setProposalForm] = useState({ coverLetter: '', proposedBudget: '', timeline: '' });
-  
-  // Admin data
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [activityLogs, setActivityLogs] = useState([]);
-  
-  // Notifications
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    if (currentUser) {
-      loadJobs();
-      loadNotifications();
-      if (currentUser.role === 'Admin') {
-        loadUsers();
-        loadStats();
-        loadActivityLogs();
-      }
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (selectedJob) loadProposals(selectedJob._id);
-  }, [selectedJob]);
-
-  // Poll for new notifications every 10 seconds
-  useEffect(() => {
-    if (currentUser) {
-      const interval = setInterval(() => {
-        loadNotifications();
-      }, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUser]);
+  const selectedRole = role.charAt(0).toUpperCase() + role.slice(1);
 
   const handleLogin = async () => {
     setError('');
@@ -78,8 +80,8 @@ function App() {
       const data = await res.json();
 
       if (res.ok) {
-        setCurrentUser(data);
-        setLoginForm({ email: '', password: '' });
+        localStorage.setItem('currentUser', JSON.stringify(data));
+        navigate('/dashboard');
       } else {
         setError(data.error || 'Login failed');
       }
@@ -108,9 +110,8 @@ function App() {
       const data = await res.json();
 
       if (res.ok) {
-        setCurrentUser(data);
-        setRegisterForm({ name: '', email: '', password: '' });
-        setRegisterMode(false);
+        localStorage.setItem('currentUser', JSON.stringify(data));
+        navigate('/dashboard');
       } else {
         setError(data.error || 'Registration failed');
       }
@@ -119,11 +120,144 @@ function App() {
     }
   };
 
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <button onClick={() => navigate('/')} className="back-btn">
+          ← Back
+        </button>
+        
+        <div className="login-header">
+          <div className="logo">
+            {selectedRole === 'Admin' ? '👑' : selectedRole === 'Client' ? '💼' : '👨‍💻'}
+          </div>
+          <h1>{registerMode ? 'Register' : 'Login'} as {selectedRole}</h1>
+          <p>{registerMode ? 'Create your account' : 'Enter your credentials'}</p>
+        </div>
+
+        {error && <div className="error-message">{error}</div>}
+
+        <div className="login-form">
+          {registerMode && (
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={registerForm.name}
+              onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})}
+              className="input"
+            />
+          )}
+          
+          <input
+            type="email"
+            placeholder="Email"
+            value={registerMode ? registerForm.email : loginForm.email}
+            onChange={(e) => registerMode 
+              ? setRegisterForm({...registerForm, email: e.target.value})
+              : setLoginForm({...loginForm, email: e.target.value})
+            }
+            className="input"
+          />
+          
+          <input
+            type="password"
+            placeholder="Password"
+            value={registerMode ? registerForm.password : loginForm.password}
+            onChange={(e) => registerMode
+              ? setRegisterForm({...registerForm, password: e.target.value})
+              : setLoginForm({...loginForm, password: e.target.value})
+            }
+            className="input"
+            onKeyPress={(e) => e.key === 'Enter' && (registerMode ? handleRegister() : handleLogin())}
+          />
+
+          <button 
+            onClick={registerMode ? handleRegister : handleLogin} 
+            className="btn-primary full-width"
+          >
+            {registerMode ? 'Register' : 'Login'}
+          </button>
+
+          <div className="login-footer">
+            <button 
+              onClick={() => {
+                setRegisterMode(!registerMode);
+                setError('');
+              }}
+              className="link-btn"
+            >
+              {registerMode ? 'Already have an account? Login' : "Don't have an account? Register"}
+            </button>
+          </div>
+
+          <div className="demo-credentials">
+            <p><strong>Demo Credentials:</strong></p>
+            {selectedRole === 'Admin' && <p>admin@freelance.com / admin123</p>}
+            {selectedRole === 'Client' && <p>Register a new account</p>}
+            {selectedRole === 'Freelancer' && <p>Register a new account</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Protected Route Wrapper
+function ProtectedRoute({ children }) {
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  
+  if (!currentUser) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+}
+
+// Main Dashboard Component
+function Dashboard() {
+  const navigate = useNavigate();
+  const [currentUser] = useState(() => JSON.parse(localStorage.getItem('currentUser')));
+  const [view, setView] = useState('jobs');
+  const [jobs, setJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [proposals, setProposals] = useState([]);
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [showProposalForm, setShowProposalForm] = useState(false);
+  const [jobForm, setJobForm] = useState({ title: '', description: '', budget: '', status: 'Active' });
+  const [proposalForm, setProposalForm] = useState({ coverLetter: '', proposedBudget: '', timeline: '' });
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadJobs();
+      loadNotifications();
+      if (currentUser.role === 'Admin') {
+        loadUsers();
+        loadStats();
+        loadActivityLogs();
+      }
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (selectedJob) loadProposals(selectedJob._id);
+  }, [selectedJob]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const interval = setInterval(loadNotifications, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser]);
+
   const loadJobs = async () => {
     try {
       const res = await fetch(`${API_URL}/jobs?userId=${currentUser.id}&role=${currentUser.role}`);
-      const data = await res.json();
-      setJobs(data);
+      setJobs(await res.json());
     } catch (err) {
       console.error('Error loading jobs:', err);
     }
@@ -132,8 +266,7 @@ function App() {
   const loadProposals = async (jobId) => {
     try {
       const res = await fetch(`${API_URL}/proposals?jobId=${jobId}`);
-      const data = await res.json();
-      setProposals(data);
+      setProposals(await res.json());
     } catch (err) {
       console.error('Error loading proposals:', err);
     }
@@ -142,8 +275,7 @@ function App() {
   const loadUsers = async () => {
     try {
       const res = await fetch(`${API_URL}/users`);
-      const data = await res.json();
-      setUsers(data);
+      setUsers(await res.json());
     } catch (err) {
       console.error('Error loading users:', err);
     }
@@ -152,8 +284,7 @@ function App() {
   const loadStats = async () => {
     try {
       const res = await fetch(`${API_URL}/admin/stats`);
-      const data = await res.json();
-      setStats(data);
+      setStats(await res.json());
     } catch (err) {
       console.error('Error loading stats:', err);
     }
@@ -162,8 +293,7 @@ function App() {
   const loadActivityLogs = async () => {
     try {
       const res = await fetch(`${API_URL}/activity-logs?limit=50`);
-      const data = await res.json();
-      setActivityLogs(data);
+      setActivityLogs(await res.json());
     } catch (err) {
       console.error('Error loading activity logs:', err);
     }
@@ -185,7 +315,7 @@ function App() {
       await fetch(`${API_URL}/notifications/${notificationId}/read`, { method: 'PUT' });
       loadNotifications();
     } catch (err) {
-      console.error('Error marking notification as read:', err);
+      console.error('Error:', err);
     }
   };
 
@@ -194,31 +324,25 @@ function App() {
       await fetch(`${API_URL}/notifications/read-all/${currentUser.id}`, { method: 'PUT' });
       loadNotifications();
     } catch (err) {
-      console.error('Error marking all as read:', err);
+      console.error('Error:', err);
     }
   };
 
   const handleCreateJob = async () => {
     if (!jobForm.title || !jobForm.description || !jobForm.budget) return;
-    
     try {
       const res = await fetch(`${API_URL}/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...jobForm,
-          clientId: currentUser.id,
-          clientName: currentUser.name
-        })
+        body: JSON.stringify({ ...jobForm, clientId: currentUser.id, clientName: currentUser.name })
       });
-      
       if (res.ok) {
         setJobForm({ title: '', description: '', budget: '', status: 'Active' });
         setShowJobForm(false);
         loadJobs();
       }
     } catch (err) {
-      console.error('Error creating job:', err);
+      console.error('Error:', err);
     }
   };
 
@@ -227,28 +351,21 @@ function App() {
       const res = await fetch(`${API_URL}/jobs/${jobId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          status: newStatus,
-          userId: currentUser.id,
-          userName: currentUser.name
-        })
+        body: JSON.stringify({ status: newStatus, userId: currentUser.id, userName: currentUser.name })
       });
-      
       if (res.ok) {
         loadJobs();
         if (selectedJob && selectedJob._id === jobId) {
-          const updatedJob = await res.json();
-          setSelectedJob(updatedJob);
+          setSelectedJob(await res.json());
         }
       }
     } catch (err) {
-      console.error('Error updating job status:', err);
+      console.error('Error:', err);
     }
   };
 
   const handleCreateProposal = async () => {
     if (!proposalForm.coverLetter || !proposalForm.proposedBudget || !proposalForm.timeline) return;
-    
     try {
       const res = await fetch(`${API_URL}/proposals`, {
         method: 'POST',
@@ -260,14 +377,16 @@ function App() {
           freelancerName: currentUser.name
         })
       });
-      
+      const data = await res.json();
       if (res.ok) {
         setProposalForm({ coverLetter: '', proposedBudget: '', timeline: '' });
         setShowProposalForm(false);
         loadProposals(selectedJob._id);
+      } else {
+        alert(data.error || 'Error submitting proposal');
       }
     } catch (err) {
-      console.error('Error creating proposal:', err);
+      alert('Error submitting proposal');
     }
   };
 
@@ -277,14 +396,13 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      
       if (res.ok) {
         loadProposals(selectedJob._id);
         loadJobs();
         loadNotifications();
       }
     } catch (err) {
-      console.error('Error accepting proposal:', err);
+      console.error('Error:', err);
     }
   };
 
@@ -295,192 +413,51 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Rejected' })
       });
-      
-      if (res.ok) {
-        loadProposals(selectedJob._id);
-      }
+      if (res.ok) loadProposals(selectedJob._id);
     } catch (err) {
-      console.error('Error rejecting proposal:', err);
+      console.error('Error:', err);
     }
   };
 
   const handleDeleteJob = async (jobId) => {
     if (!window.confirm('Delete this job?')) return;
-    
     try {
       const res = await fetch(`${API_URL}/jobs/${jobId}`, { 
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          userName: currentUser.name
-        })
+        body: JSON.stringify({ userId: currentUser.id, userName: currentUser.name })
       });
-      
       if (res.ok) {
         loadJobs();
         if (selectedJob?._id === jobId) setSelectedJob(null);
       }
     } catch (err) {
-      console.error('Error deleting job:', err);
+      console.error('Error:', err);
     }
   };
 
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Delete this user?')) return;
-    
     try {
       const res = await fetch(`${API_URL}/users/${userId}`, { 
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: currentUser.id,
-          adminName: currentUser.name
-        })
+        body: JSON.stringify({ adminId: currentUser.id, adminName: currentUser.name })
       });
-      
       if (res.ok) {
         loadUsers();
         loadStats();
       }
     } catch (err) {
-      console.error('Error deleting user:', err);
+      console.error('Error:', err);
     }
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    setSelectedRole(null);
-    setError('');
-    setView('jobs');
+    localStorage.removeItem('currentUser');
+    navigate('/');
   };
 
-  // Role Selection Screen
-  if (!selectedRole) {
-    return (
-      <div className="login-container">
-        <div className="login-card">
-          <div className="login-header">
-            <div className="logo">💼</div>
-            <h1>FreelanceHub</h1>
-            <p>Select your role to continue</p>
-          </div>
-          
-          <div className="user-list">
-            <button onClick={() => setSelectedRole('Admin')} className="user-button">
-              <div>
-                <div className="user-name">Admin</div>
-                <div className="user-role">Manage platform</div>
-              </div>
-              <span className="user-icon">👑</span>
-            </button>
-            
-            <button onClick={() => setSelectedRole('Client')} className="user-button">
-              <div>
-                <div className="user-name">Client</div>
-                <div className="user-role">Post jobs</div>
-              </div>
-              <span className="user-icon">💼</span>
-            </button>
-            
-            <button onClick={() => setSelectedRole('Freelancer')} className="user-button">
-              <div>
-                <div className="user-name">Freelancer</div>
-                <div className="user-role">Find work</div>
-              </div>
-              <span className="user-icon">👨‍💻</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Login Screen
-  if (!currentUser) {
-    return (
-      <div className="login-container">
-        <div className="login-card">
-          <button onClick={() => setSelectedRole(null)} className="back-btn">
-            ← Back
-          </button>
-          
-          <div className="login-header">
-            <div className="logo">
-              {selectedRole === 'Admin' ? '👑' : selectedRole === 'Client' ? '💼' : '👨‍💻'}
-            </div>
-            <h1>{registerMode ? 'Register' : 'Login'} as {selectedRole}</h1>
-            <p>{registerMode ? 'Create your account' : 'Enter your credentials'}</p>
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <div className="login-form">
-            {registerMode && (
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={registerForm.name}
-                onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})}
-                className="input"
-              />
-            )}
-            
-            <input
-              type="email"
-              placeholder="Email"
-              value={registerMode ? registerForm.email : loginForm.email}
-              onChange={(e) => registerMode 
-                ? setRegisterForm({...registerForm, email: e.target.value})
-                : setLoginForm({...loginForm, email: e.target.value})
-              }
-              className="input"
-            />
-            
-            <input
-              type="password"
-              placeholder="Password"
-              value={registerMode ? registerForm.password : loginForm.password}
-              onChange={(e) => registerMode
-                ? setRegisterForm({...registerForm, password: e.target.value})
-                : setLoginForm({...loginForm, password: e.target.value})
-              }
-              className="input"
-              onKeyPress={(e) => e.key === 'Enter' && (registerMode ? handleRegister() : handleLogin())}
-            />
-
-            <button 
-              onClick={registerMode ? handleRegister : handleLogin} 
-              className="btn-primary full-width"
-            >
-              {registerMode ? 'Register' : 'Login'}
-            </button>
-
-            <div className="login-footer">
-              <button 
-                onClick={() => {
-                  setRegisterMode(!registerMode);
-                  setError('');
-                }}
-                className="link-btn"
-              >
-                {registerMode ? 'Already have an account? Login' : "Don't have an account? Register"}
-              </button>
-            </div>
-
-            <div className="demo-credentials">
-              <p><strong>Demo Credentials:</strong></p>
-              {selectedRole === 'Admin' && <p>admin@freelance.com / admin123</p>}
-              {selectedRole === 'Client' && <p>Register a new account</p>}
-              {selectedRole === 'Freelancer' && <p>Register a new account</p>}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Main App
   return (
     <div className="app">
       <header className="header">
@@ -489,91 +466,44 @@ function App() {
             <span className="logo">💼</span>
             <h1>FreelanceHub</h1>
           </div>
-          
           <nav className="nav-menu">
-            <button 
-              onClick={() => setView('jobs')}
-              className={`nav-btn ${view === 'jobs' ? 'active' : ''}`}
-            >
-              Jobs
-            </button>
+            <button onClick={() => setView('jobs')} className={`nav-btn ${view === 'jobs' ? 'active' : ''}`}>Jobs</button>
             {currentUser.role === 'Admin' && (
               <>
-                <button 
-                  onClick={() => setView('admin')}
-                  className={`nav-btn ${view === 'admin' ? 'active' : ''}`}
-                >
-                  Admin
-                </button>
-                <button 
-                  onClick={() => setView('activity')}
-                  className={`nav-btn ${view === 'activity' ? 'active' : ''}`}
-                >
-                  Activity
-                </button>
+                <button onClick={() => setView('admin')} className={`nav-btn ${view === 'admin' ? 'active' : ''}`}>Admin</button>
+                <button onClick={() => setView('activity')} className={`nav-btn ${view === 'activity' ? 'active' : ''}`}>Activity</button>
               </>
             )}
-            <button 
-              onClick={() => setView('notifications')}
-              className={`nav-btn ${view === 'notifications' ? 'active' : ''}`}
-            >
+            <button onClick={() => setView('notifications')} className={`nav-btn ${view === 'notifications' ? 'active' : ''}`}>
               🔔 Notifications {unreadCount > 0 && <span className="badge-count">{unreadCount}</span>}
             </button>
           </nav>
-          
           <div className="header-right">
             <div className="user-info">
               <div className="user-name">{currentUser.name}</div>
               <div className="user-role">{currentUser.role}</div>
             </div>
-            <button onClick={handleLogout} className="switch-btn">
-              Logout
-            </button>
+            <button onClick={handleLogout} className="switch-btn">Logout</button>
           </div>
         </div>
       </header>
 
       <div className="main-content">
-        {/* JOBS VIEW */}
         {view === 'jobs' && (
           <div className="grid">
             <div className="panel">
               <div className="panel-header">
                 <h2>Available Jobs</h2>
                 {currentUser.role === 'Client' && (
-                  <button onClick={() => setShowJobForm(!showJobForm)} className="btn-primary">
-                    ➕ Post Job
-                  </button>
+                  <button onClick={() => setShowJobForm(!showJobForm)} className="btn-primary">➕ Post Job</button>
                 )}
               </div>
-
               {showJobForm && currentUser.role === 'Client' && (
                 <div className="form-container">
-                  <input
-                    type="text"
-                    placeholder="Job Title"
-                    value={jobForm.title}
-                    onChange={(e) => setJobForm({...jobForm, title: e.target.value})}
-                    className="input"
-                  />
-                  <textarea
-                    placeholder="Job Description"
-                    value={jobForm.description}
-                    onChange={(e) => setJobForm({...jobForm, description: e.target.value})}
-                    className="textarea"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Budget ($)"
-                    value={jobForm.budget}
-                    onChange={(e) => setJobForm({...jobForm, budget: e.target.value})}
-                    className="input"
-                  />
-                  <select 
-                    value={jobForm.status}
-                    onChange={(e) => setJobForm({...jobForm, status: e.target.value})}
-                    className="input"
-                  >
+                  <input type="text" placeholder="Job Title" value={jobForm.title} onChange={(e) => setJobForm({...jobForm, title: e.target.value})} className="input" />
+                  <textarea placeholder="Job Description" value={jobForm.description} onChange={(e) => setJobForm({...jobForm, description: e.target.value})} className="textarea" />
+                  <input type="number" placeholder="Budget ($)" value={jobForm.budget} onChange={(e) => setJobForm({...jobForm, budget: e.target.value})} className="input" min="1" step="1" />
+                  <select value={jobForm.status} onChange={(e) => setJobForm({...jobForm, status: e.target.value})} className="input">
                     <option value="Draft">Draft</option>
                     <option value="Active">Active (Visible to Freelancers)</option>
                   </select>
@@ -583,23 +513,16 @@ function App() {
                   </div>
                 </div>
               )}
-
               <div className="job-list">
                 {jobs.length === 0 ? (
                   <p className="empty-state">No jobs posted yet</p>
                 ) : (
                   jobs.map(job => (
-                    <div
-                      key={job._id}
-                      onClick={() => setSelectedJob(job)}
-                      className={`job-card ${selectedJob?._id === job._id ? 'selected' : ''}`}
-                    >
+                    <div key={job._id} onClick={() => setSelectedJob(job)} className={`job-card ${selectedJob?._id === job._id ? 'selected' : ''}`}>
                       <div className="job-header">
                         <h3>{job.title}</h3>
                         <div className="job-badges">
-                          <span className={`badge badge-${job.status.toLowerCase().replace(' ', '-')}`}>
-                            {job.status}
-                          </span>
+                          <span className={`badge badge-${job.status.toLowerCase().replace(' ', '-')}`}>{job.status}</span>
                           {job.status === 'In Progress' && job.hiredFreelancerId === currentUser.id && (
                             <span className="badge badge-hired">You're Hired!</span>
                           )}
@@ -610,69 +533,30 @@ function App() {
                         <span className="job-client">by {job.clientName}</span>
                         <span className="job-budget">${job.budget}</span>
                       </div>
-                      
-                      {(currentUser.role === 'Client' && currentUser.id === job.clientId) && (
+                      {currentUser.role === 'Client' && currentUser.id === job.clientId && (
                         <div className="job-actions">
-                          {job.status === 'Draft' && (
-                            <button onClick={(e) => { e.stopPropagation(); handleUpdateJobStatus(job._id, 'Active'); }} className="action-btn-sm">
-                              Publish
-                            </button>
-                          )}
-                          {job.status === 'In Progress' && (
-                            <button onClick={(e) => { e.stopPropagation(); handleUpdateJobStatus(job._id, 'Completed'); }} className="action-btn-sm">
-                              Mark Complete
-                            </button>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job._id); }} className="delete-btn">
-                            Delete
-                          </button>
+                          {job.status === 'Draft' && <button onClick={(e) => { e.stopPropagation(); handleUpdateJobStatus(job._id, 'Active'); }} className="action-btn-sm">Publish</button>}
+                          {job.status === 'In Progress' && <button onClick={(e) => { e.stopPropagation(); handleUpdateJobStatus(job._id, 'Completed'); }} className="action-btn-sm">Mark Complete</button>}
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job._id); }} className="delete-btn">Delete</button>
                         </div>
                       )}
-                      
-                      {currentUser.role === 'Admin' && (
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job._id); }} className="delete-btn">
-                          Delete
-                        </button>
-                      )}
+                      {currentUser.role === 'Admin' && <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job._id); }} className="delete-btn">Delete</button>}
                     </div>
                   ))
                 )}
               </div>
             </div>
-
             <div className="panel">
-              <h2 className="panel-title">
-                {selectedJob ? `Proposals for "${selectedJob.title}"` : 'Select a job to view proposals'}
-              </h2>
-
+              <h2 className="panel-title">{selectedJob ? `Proposals for "${selectedJob.title}"` : 'Select a job to view proposals'}</h2>
               {selectedJob && currentUser.role === 'Freelancer' && selectedJob.status === 'Active' && (
                 <div className="proposal-submit">
                   {!showProposalForm ? (
-                    <button onClick={() => setShowProposalForm(true)} className="btn-success full-width">
-                      📨 Submit Proposal
-                    </button>
+                    <button onClick={() => setShowProposalForm(true)} className="btn-success full-width">📨 Submit Proposal</button>
                   ) : (
                     <div className="form-container">
-                      <textarea
-                        placeholder="Cover Letter"
-                        value={proposalForm.coverLetter}
-                        onChange={(e) => setProposalForm({...proposalForm, coverLetter: e.target.value})}
-                        className="textarea"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Your Proposed Budget ($)"
-                        value={proposalForm.proposedBudget}
-                        onChange={(e) => setProposalForm({...proposalForm, proposedBudget: e.target.value})}
-                        className="input"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Timeline (e.g., 2 weeks)"
-                        value={proposalForm.timeline}
-                        onChange={(e) => setProposalForm({...proposalForm, timeline: e.target.value})}
-                        className="input"
-                      />
+                      <textarea placeholder="Cover Letter" value={proposalForm.coverLetter} onChange={(e) => setProposalForm({...proposalForm, coverLetter: e.target.value})} className="textarea" />
+                      <input type="number" placeholder="Your Proposed Budget ($)" value={proposalForm.proposedBudget} onChange={(e) => setProposalForm({...proposalForm, proposedBudget: e.target.value})} className="input" min="1" step="1" />
+                      <input type="text" placeholder="Timeline (e.g., 2 weeks)" value={proposalForm.timeline} onChange={(e) => setProposalForm({...proposalForm, timeline: e.target.value})} className="input" />
                       <div className="btn-group">
                         <button onClick={handleCreateProposal} className="btn-success">Submit</button>
                         <button onClick={() => setShowProposalForm(false)} className="btn-secondary">Cancel</button>
@@ -681,7 +565,6 @@ function App() {
                   )}
                 </div>
               )}
-
               <div className="proposal-list">
                 {!selectedJob ? (
                   <p className="empty-state">No job selected</p>
@@ -693,12 +576,7 @@ function App() {
                       <div className="proposal-header">
                         <div>
                           <h4>{proposal.freelancerName}</h4>
-                          <span className={`badge ${
-                            proposal.status === 'Pending' ? 'badge-warning' :
-                            proposal.status === 'Accepted' ? 'badge-success' : 'badge-danger'
-                          }`}>
-                            {proposal.status}
-                          </span>
+                          <span className={`badge ${proposal.status === 'Pending' ? 'badge-warning' : proposal.status === 'Accepted' ? 'badge-success' : 'badge-danger'}`}>{proposal.status}</span>
                         </div>
                         <div className="proposal-info">
                           <div className="proposal-budget">${proposal.proposedBudget}</div>
@@ -706,15 +584,10 @@ function App() {
                         </div>
                       </div>
                       <p className="proposal-text">{proposal.coverLetter}</p>
-                      
                       {currentUser.role === 'Client' && currentUser.id === selectedJob.clientId && proposal.status === 'Pending' && (
                         <div className="btn-group">
-                          <button onClick={() => handleAcceptProposal(proposal._id)} className="btn-success-sm">
-                            ✅ Accept
-                          </button>
-                          <button onClick={() => handleRejectProposal(proposal._id)} className="btn-danger-sm">
-                            ❌ Reject
-                          </button>
+                          <button onClick={() => handleAcceptProposal(proposal._id)} className="btn-success-sm">✅ Accept</button>
+                          <button onClick={() => handleRejectProposal(proposal._id)} className="btn-danger-sm">❌ Reject</button>
                         </div>
                       )}
                     </div>
@@ -725,57 +598,29 @@ function App() {
           </div>
         )}
 
-        {/* ADMIN VIEW */}
         {view === 'admin' && currentUser.role === 'Admin' && (
           <div className="admin-container">
             <h2 className="section-title">Admin Dashboard</h2>
-            
             {stats && (
               <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-value">{stats.totalUsers}</div>
-                  <div className="stat-label">Total Users</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value">{stats.totalJobs}</div>
-                  <div className="stat-label">Total Jobs</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value">{stats.totalProposals}</div>
-                  <div className="stat-label">Total Proposals</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value">{stats.activeJobs}</div>
-                  <div className="stat-label">Active Jobs</div>
-                </div>
+                <div className="stat-card"><div className="stat-value">{stats.totalUsers}</div><div className="stat-label">Total Users</div></div>
+                <div className="stat-card"><div className="stat-value">{stats.totalJobs}</div><div className="stat-label">Total Jobs</div></div>
+                <div className="stat-card"><div className="stat-value">{stats.totalProposals}</div><div className="stat-label">Total Proposals</div></div>
+                <div className="stat-card"><div className="stat-value">{stats.activeJobs}</div><div className="stat-label">Active Jobs</div></div>
               </div>
             )}
-
             <div className="admin-section">
               <h3>User Management</h3>
               <div className="user-table">
                 <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
                   <tbody>
                     {users.map(user => (
                       <tr key={user._id}>
                         <td>{user.name}</td>
                         <td>{user.email}</td>
                         <td><span className="role-badge">{user.role}</span></td>
-                        <td>
-                          {user._id !== currentUser.id && (
-                            <button onClick={() => handleDeleteUser(user._id)} className="btn-danger-sm">
-                              Delete
-                            </button>
-                          )}
-                        </td>
+                        <td>{user._id !== currentUser.id && <button onClick={() => handleDeleteUser(user._id)} className="btn-danger-sm">Delete</button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -785,7 +630,6 @@ function App() {
           </div>
         )}
 
-        {/* ACTIVITY LOG VIEW */}
         {view === 'activity' && currentUser.role === 'Admin' && (
           <div className="activity-container">
             <h2 className="section-title">Activity Log</h2>
@@ -805,27 +649,18 @@ function App() {
           </div>
         )}
 
-        {/* NOTIFICATIONS VIEW */}
         {view === 'notifications' && (
           <div className="notifications-container">
             <div className="notifications-header">
               <h2>Notifications</h2>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="btn-secondary">
-                  Mark All Read
-                </button>
-              )}
+              {unreadCount > 0 && <button onClick={markAllRead} className="btn-secondary">Mark All Read</button>}
             </div>
             <div className="notifications-list">
               {notifications.length === 0 ? (
                 <p className="empty-state">No notifications</p>
               ) : (
                 notifications.map(notif => (
-                  <div 
-                    key={notif._id} 
-                    className={`notification-item ${notif.isRead ? 'read' : 'unread'}`}
-                    onClick={() => !notif.isRead && markNotificationRead(notif._id)}
-                  >
+                  <div key={notif._id} className={`notification-item ${notif.isRead ? 'read' : 'unread'}`} onClick={() => !notif.isRead && markNotificationRead(notif._id)}>
                     <div className="notification-icon">
                       {notif.type === 'proposal' && '📨'}
                       {notif.type === 'acceptance' && '✅'}
@@ -845,6 +680,19 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<RoleSelection />} />
+        <Route path="/login/:role" element={<Login />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
